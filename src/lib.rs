@@ -62,10 +62,8 @@ fn send_response_object(stream: &mut TcpStream, response: Response) -> std::io::
         _ => b"200 OK"
     })?;
 
-    stream.write(b"\r\nConnection: keep-alive\r\nContent-Type: application/json; charset=utf-8\r\nKeep-Alive: timeout=5\r\n\r\n")?;
-    stream.write(b"{\"message\": \"")?;
+    stream.write(b"\r\nConnection: keep-alive\r\nContent-Type: text/plain; charset=utf-8\r\nKeep-Alive: timeout=5\r\n\r\n")?;
     stream.write(response.body.as_bytes())?;
-    stream.write(b"\"}")?;
 
     Ok(())
 }
