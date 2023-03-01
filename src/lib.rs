@@ -73,8 +73,8 @@ impl App {
         Ok(()) 
     }
 
-    pub fn listen(&mut self, _port: &str) -> std::io::Result<()> {
-        let listener = TcpListener::bind("localhost:8080")?;
+    pub fn listen(&mut self, port: &str) -> std::io::Result<()> {
+        let listener = TcpListener::bind(format!("127.0.0.1{}", port))?;
 
         for stream in listener.incoming() {
             match stream {
