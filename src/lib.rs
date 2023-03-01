@@ -29,6 +29,12 @@ pub enum HTTP {
     OPTIONS
 }
 
+pub enum HTTPVersion {
+    One,
+    OnePointOne,
+    Two
+}
+
 impl App {
     pub fn new() -> Self {
         App {
@@ -80,11 +86,11 @@ impl App {
                     
                     println!("{message}");
 
-                    let method: HTTP = parser::get_method(&message).unwrap(); 
+                    let meta = parser::parse_http_meta(&message).unwrap();
 
                     let msg = self.registered_routes.get(&RouteKey {
-                        method,
-                        path: "/".to_string()
+                        method: meta.method,
+                        path: meta.path 
                     });
 
                     if msg.is_none() {

@@ -1,27 +1,59 @@
-use crate::HTTP;
+use crate::{ HTTP, HTTPVersion };
 
 // Utilities for parsing HTTP requests
 
-pub fn get_method(msg: &str) -> Option<HTTP> {
-    let req_line = msg.split("\r\n\r\n").next();
+pub struct Meta {
+    pub method: HTTP,
+    pub path: String,
+    pub version: HTTPVersion
+}
 
-    match req_line {
+pub fn parse_http_meta(msg: &str) -> Option<Meta> {
+    let meta_line = msg.split("\r\n").next();
+
+    match meta_line {
         None => None,
         Some(line) => {
-            if line.len() < 3 || !line.chars().nth(0).unwrap().is_alphabetic() {
+            let parts: Vec<&str> = line.split(" ").map(|x| x.trim()).collect();
+
+            if parts.len() < 3 {
+                // Must have all 3
                 return None;
             }
 
-            match line {
-                l if l.to_uppercase().starts_with("GET") => Some(HTTP::GET),
-                l if l.to_uppercase().starts_with("POST") => Some(HTTP::POST),
-                l if l.to_uppercase().starts_with("OPTIONS") => Some(HTTP::OPTIONS),
-                l if l.to_uppercase().starts_with("PUT") => Some(HTTP::PUT),
-                l if l.to_uppercase().starts_with("PATCH") => Some(HTTP::PATCH),
-                l if l.to_uppercase().starts_with("DELETE") => Some(HTTP::DELETE),
-                l if l.to_uppercase().starts_with("HEAD") => Some(HTTP::HEAD),
+            let method: Option<HTTP> = match parts[0].to_uppercase().as_str() {
+                "GET" => Some(HTTP::GET),
+                "POST" => Some(HTTP::POST),
+                "PUT" => Some(HTTP::PUT),
+                "PATCH" => Some(HTTP::PATCH),
+                "DELETE" => Some(HTTP::DELETE),
+                "OPTIONS" => Some(HTTP::OPTIONS),
+                "HEAD" => Some(HTTP::HEAD),
                 _ => None
+            };
+
+            if method.is_none() {
+                // Unknown method!
+                return None;
             }
+
+            let path = parts[1].to_string();
+
+            let version: Option<HTTPVersion> = match parts[2].to_uppercase().as_str() {
+                "HTTP/1" => Some(HTTPVersion::One),
+                "HTTP/1.1" => Some(HTTPVersion::OnePointOne),
+                "HTTP/2" => Some(HTTPVersion::Two),
+                _ => None
+            };
+
+            if version.is_none() {
+                // Unknown HTTP version (we don't support v3 yet)
+                return None;
+            }
+
+            return Some(
+                Meta { method: method.unwrap(), path, version: version.unwrap() }
+            );
         }
     }
 }
