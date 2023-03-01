@@ -18,8 +18,12 @@ It is very speciailised without much error handling currently, as this has only 
 fn main() {
     let mut app = ratt::App::new();
 
-    app.register("/", ratt::HTTP::GET, | req, res | {
-        "A message!".to_string()
+    app.register("/", ratt::HTTP::GET, | _req, res | {
+        res.send("Some text!".to_string())
+    });
+
+    app.register("/post-example", ratt::HTTP::POST, | _req, res | {
+        res.set_status(201).send("Created successfully!".to_string())      
     });
 
     app.listen(":8080").unwrap();
