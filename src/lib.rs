@@ -9,7 +9,7 @@ pub struct App {
 }
 
 pub struct RegisteredRoute {
-    text: String    
+    callback: Box<dyn FnMut(i8, Response) -> Response>
 }
 
 #[derive(PartialEq, Eq, Hash, Debug)]
@@ -29,6 +29,47 @@ pub enum HTTPVersion {
     Two
 }
 
+pub struct Response {
+    // TODO: Maybe move this to an Enum?
+    status: usize,
+    body: String
+}
+
+impl Response {
+    pub fn set_status(&self, status: usize) -> Self {
+        Response {
+            status,
+            body: self.body.clone()
+        }
+    }
+
+    pub fn send(&self, content: String) -> Self {
+        Response {
+            status: self.status,
+            body: content
+        }
+    }
+}
+
+fn send_response_object(stream: &mut TcpStream, response: Response) -> std::io::Result<()> {
+    stream.write(b"HTTP/1.1 ")?; 
+    stream.write(match response.status {
+        200 => b"200 OK",
+        201 => b"201 Created",
+        400 => b"400 Bad Request",
+        404 => b"404 Not Found",
+        500 => b"500 Internal Server Error",
+        _ => b"200 OK"
+    })?;
+
+    stream.write(b"\r\nConnection: keep-alive\r\nContent-Type: application/json; charset=utf-8\r\nKeep-Alive: timeout=5\r\n\r\n")?;
+    stream.write(b"{\"message\": \"")?;
+    stream.write(response.body.as_bytes())?;
+    stream.write(b"\"}")?;
+
+    Ok(())
+}
+
 impl App {
     pub fn new() -> Self {
         App {
@@ -36,13 +77,13 @@ impl App {
         }
     }
 
-    pub fn register<T>(&mut self, path: &str, method: HTTP, mut callback: T) where T: FnMut(i8, i8) -> String { 
+    pub fn register<T>(&mut self, path: &str, method: HTTP, callback: T) where T: FnMut(i8, Response) -> Response + 'static { 
         let currently_registered = self.registered_routes.get_mut(path);
 
         match currently_registered {
             None => {
                 let mut map = HashMap::<HTTP, RegisteredRoute>::new();
-                map.insert(method, RegisteredRoute { text: callback(0, 0) });
+                map.insert(method, RegisteredRoute { callback: Box::from(callback) });
                 self.registered_routes.insert(path.to_string(), map);
             },
             Some(map) => {
@@ -50,7 +91,7 @@ impl App {
                 if already_exists {
                     eprintln!("ERROR: Registered the same route ({method:?} {path}) twice.");
                 } else {
-                    map.insert(method, RegisteredRoute { text: callback(0, 0) });
+                    map.insert(method, RegisteredRoute { callback: Box::from(callback) });
                 }
             }
         }
@@ -72,6 +113,7 @@ impl App {
 
         Ok(()) 
     }
+
 
     pub fn listen(&mut self, port: &str) -> std::io::Result<()> {
         let listener = TcpListener::bind(format!("127.0.0.1{}", port))?;
@@ -119,18 +161,22 @@ impl App {
                         continue;
                     }
 
-                    let msg = router.unwrap().get(&meta.method);
+                    let response_obj = router.unwrap().get_mut(&meta.method);
 
-                    if msg.is_none() {
+                    if response_obj.is_none() {
                         self.send_status(&mut s, 405)?;
                         continue;
                     }
 
-                    s.write(b"HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Type: application/json; charset=utf-8\r\nKeep-Alive: timeout=5\r\n\r\n{\"success\":\"")?;
+                    // For now, only 200 is allowed
+
+                    send_response_object(&mut s, (response_obj.unwrap().callback)(0, Response { status: 200, body: String::new() }))?;
+
+                    // s.write(b"HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Type: application/json; charset=utf-8\r\nKeep-Alive: timeout=5\r\n\r\n{\"success\":\"")?;
     
                     // Manually route as GET /
-                    s.write(msg.unwrap().text.as_str().as_bytes())?;
-                    s.write(b"\"}")?;
+                    // s.write(msg.unwrap().text.as_str().as_bytes())?;
+                    // s.write(b"\"}")?;
 
                     s.flush()?;
                 }
