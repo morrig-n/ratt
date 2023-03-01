@@ -8,7 +8,7 @@ This library is **work-in-progress**. Use at your own risk.
 
 This library is very unfinished at present.
 
-Currently it supports returning a simple message on a GET request.
+Currently, it supports returning a simple message on requests to static routes (e.g. GET /, POST /more).
 
 It is very speciailised without much error handling currently, as this has only just begun development.
 
@@ -22,6 +22,6 @@ fn main() {
         "A message!".to_string()
     });
 
-    app.listen(":8080");
+    app.listen(":8080").unwrap();
 }
 ```
