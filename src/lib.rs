@@ -1,7 +1,7 @@
 pub mod parser;
 
 use std::collections::HashMap;
-use std::net::{TcpListener, Shutdown};
+use std::net::{TcpListener, Shutdown, TcpStream};
 use std::io::{Read, Write};
 
 pub struct App {
@@ -56,6 +56,23 @@ impl App {
         }
     }
 
+    fn send_status(&self, stream: &mut TcpStream, status: usize) -> std::io::Result<()> {
+        let meta = match status {
+            404 => "404 Not Found",
+            405 => "405 Method Not Allowed",
+            _ => "200 OK"
+        }.as_bytes();
+
+        stream.write(b"HTTP/1.1 ")?;
+        stream.write(meta)?;
+        stream.write(b"\r\n\r\n")?;
+
+        stream.flush()?;
+        stream.shutdown(Shutdown::Both)?;
+
+        Ok(()) 
+    }
+
     pub fn listen(&mut self, _port: &str) -> std::io::Result<()> {
         let listener = TcpListener::bind("localhost:8080")?;
 
@@ -98,20 +115,14 @@ impl App {
                     let router = self.registered_routes.get_mut(&meta.path);
 
                     if router.is_none() {
-                        s.write(b"HTTP/1.1 404 Not Found\r\n\r\n")?;
-                        s.flush()?;
-                        s.shutdown(Shutdown::Both)?;
-
+                        self.send_status(&mut s, 404)?;
                         continue;
                     }
 
                     let msg = router.unwrap().get(&meta.method);
 
                     if msg.is_none() {
-                        s.write(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")?;
-                        s.flush()?;
-                        s.shutdown(Shutdown::Both)?;
-                        
+                        self.send_status(&mut s, 405)?;
                         continue;
                     }
 
