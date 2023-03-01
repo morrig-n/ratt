@@ -5,20 +5,14 @@ use std::net::{TcpListener, Shutdown};
 use std::io::{Read, Write};
 
 pub struct App {
-    registered_routes: HashMap<RouteKey, RegisteredRoute>
-}
-
-#[derive(PartialEq, Eq, Hash)]
-pub struct RouteKey {
-    method: HTTP,
-    path: String
+    registered_routes: HashMap<String, HashMap<HTTP, RegisteredRoute>>
 }
 
 pub struct RegisteredRoute {
     text: String    
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 pub enum HTTP {
     GET,
     POST,
@@ -38,15 +32,28 @@ pub enum HTTPVersion {
 impl App {
     pub fn new() -> Self {
         App {
-            registered_routes: HashMap::<RouteKey, RegisteredRoute>::new()
+            registered_routes: HashMap::<String, HashMap<HTTP, RegisteredRoute>>::new()
         }
     }
 
     pub fn register<T>(&mut self, path: &str, method: HTTP, mut callback: T) where T: FnMut(i8, i8) -> String { 
-        self.registered_routes.insert(RouteKey {
-            method,
-            path: path.to_string()
-        }, RegisteredRoute { text: callback(1, 2) }); 
+        let currently_registered = self.registered_routes.get_mut(path);
+
+        match currently_registered {
+            None => {
+                let mut map = HashMap::<HTTP, RegisteredRoute>::new();
+                map.insert(method, RegisteredRoute { text: callback(0, 0) });
+                self.registered_routes.insert(path.to_string(), map);
+            },
+            Some(map) => {
+                let already_exists = map.get(&method).is_some();
+                if already_exists {
+                    eprintln!("ERROR: Registered the same route ({method:?} {path}) twice.");
+                } else {
+                    map.insert(method, RegisteredRoute { text: callback(0, 0) });
+                }
+            }
+        }
     }
 
     pub fn listen(&mut self, _port: &str) -> std::io::Result<()> {
@@ -88,10 +95,17 @@ impl App {
 
                     let meta = parser::parse_http_meta(&message).unwrap();
 
-                    let msg = self.registered_routes.get(&RouteKey {
-                        method: meta.method,
-                        path: meta.path 
-                    });
+                    let router = self.registered_routes.get_mut(&meta.path);
+
+                    if router.is_none() {
+                        s.write(b"HTTP/1.1 404 Not Found\r\n\r\n")?;
+                        s.flush()?;
+                        s.shutdown(Shutdown::Both)?;
+
+                        continue;
+                    }
+
+                    let msg = router.unwrap().get(&meta.method);
 
                     if msg.is_none() {
                         s.write(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")?;
