@@ -71,24 +71,43 @@ impl Response {
     }
 }
 
+fn send_status(stream: &mut TcpStream, status: usize) -> std::io::Result<()> {
+    let meta = match status {
+        400 => "400 Bad Request",
+        404 => "404 Not Found",
+        405 => "405 Method Not Allowed",
+        _ => "200 OK"
+    };
+
+    write!(stream, "HTTP/1.1 ")?;
+    write!(stream, "{meta}")?;
+    write!(stream, "\r\n\r\n")?;
+
+    stream.flush()?;
+    stream.shutdown(Shutdown::Both)?;
+
+    Ok(()) 
+}
+
+
 fn send_response_object(stream: &mut TcpStream, response: Response) -> std::io::Result<()> {
-    stream.write(b"HTTP/1.1 ")?; 
-    stream.write(match response.status {
-        200 => b"200 OK",
-        201 => b"201 Created",
-        400 => b"400 Bad Request",
-        404 => b"404 Not Found",
-        418 => b"418 I'm a teapot",
-        500 => b"500 Internal Server Error",
-        _ => b"200 OK"
+    write!(stream, "HTTP/1.1 ")?; 
+    write!(stream, "{}", match response.status {
+        200 => "200 OK",
+        201 => "201 Created",
+        400 => "400 Bad Request",
+        404 => "404 Not Found",
+        418 => "418 I'm a teapot",
+        500 => "500 Internal Server Error",
+        _ => "200 OK"
     })?;
 
-    stream.write(b"\r\n")?;
+    write!(stream, "\r\n")?;
     response.headers.iter().for_each(|(key, val)| {
-        stream.write(format!("{}: {}\r\n", key, val).as_bytes()).unwrap();
+        write!(stream, "{}: {}\r\n", key, val).unwrap();
     });
-    stream.write(b"\r\n")?;
-    stream.write(response.body.as_bytes())?;
+    write!(stream, "\r\n")?;
+    write!(stream, "{}", response.body)?;
 
     Ok(())
 }
@@ -120,28 +139,10 @@ impl App {
         }
     }
 
-    fn send_status(&self, stream: &mut TcpStream, status: usize) -> std::io::Result<()> {
-        let meta = match status {
-            400 => "400 Bad Request",
-            404 => "404 Not Found",
-            405 => "405 Method Not Allowed",
-            _ => "200 OK"
-        }.as_bytes();
-
-        stream.write(b"HTTP/1.1 ")?;
-        stream.write(meta)?;
-        stream.write(b"\r\n\r\n")?;
-
-        stream.flush()?;
-        stream.shutdown(Shutdown::Both)?;
-
-        Ok(()) 
-    }
-
     // TODO: Listen shouldn't really return Err at any point, since that
     // has crashed before on BrokenPipe
     pub fn listen(&mut self, port: &str) -> std::io::Result<()> {
-        let listener = TcpListener::bind(format!("127.0.0.1{}", port))?;
+        let listener = TcpListener::bind(format!("127.0.0.1{port}"))?;
 
         for stream in listener.incoming() {
             match stream {
@@ -178,7 +179,7 @@ impl App {
                     let maybe_request = parser::parse_request(&message);
 
                     if maybe_request.is_none() {
-                        self.send_status(&mut s, 400)?;
+                        send_status(&mut s, 400)?;
                         continue;
                     }
 
@@ -187,14 +188,14 @@ impl App {
                     let router = self.registered_routes.get_mut(&request.path.absolute);
 
                     if router.is_none() {
-                        self.send_status(&mut s, 404)?;
+                        send_status(&mut s, 404)?;
                         continue;
                     }
 
                     let response_obj = router.unwrap().get_mut(&request.method);
 
                     if response_obj.is_none() {
-                        self.send_status(&mut s, 405)?;
+                        send_status(&mut s, 405)?;
                         continue;
                     }
 
