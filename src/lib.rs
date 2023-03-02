@@ -9,7 +9,7 @@ pub struct App {
 }
 
 pub struct RegisteredRoute {
-    callback: Box<dyn FnMut(i8, Response) -> Response>
+    callback: Box<dyn FnMut(Request, Response) -> Response>
 }
 
 #[derive(PartialEq, Eq, Hash, Debug)]
@@ -20,13 +20,29 @@ pub enum HTTP {
     DELETE,
     PATCH,
     HEAD,
-    OPTIONS
+    OPTIONS,
+    UNRECOGNIZED
 }
 
+#[derive(Debug)]
 pub enum HTTPVersion {
     One,
     OnePointOne,
-    Two
+    Two,
+    Unknown,
+}
+
+#[derive(Debug)]
+pub struct RequestPath {
+    raw: String
+}
+
+#[derive(Debug)]
+pub struct Request {
+    pub path: RequestPath,
+    pub method: HTTP,
+    pub version: HTTPVersion,
+    pub headers: HashMap<String, String>,
 }
 
 pub struct Response {
@@ -36,18 +52,14 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn set_status(&self, status: usize) -> Self {
-        Response {
-            status,
-            body: self.body.clone()
-        }
+    pub fn set_status(mut self, status: usize) -> Self {
+        self.status = status;
+        self
     }
 
-    pub fn send(&self, content: String) -> Self {
-        Response {
-            status: self.status,
-            body: content
-        }
+    pub fn send(mut self, content: String) -> Self {
+        self.body = content;
+        self
     }
 }
 
@@ -58,6 +70,7 @@ fn send_response_object(stream: &mut TcpStream, response: Response) -> std::io::
         201 => b"201 Created",
         400 => b"400 Bad Request",
         404 => b"404 Not Found",
+        418 => b"418 I'm a teapot",
         500 => b"500 Internal Server Error",
         _ => b"200 OK"
     })?;
@@ -75,7 +88,7 @@ impl App {
         }
     }
 
-    pub fn register<T>(&mut self, path: &str, method: HTTP, callback: T) where T: FnMut(i8, Response) -> Response + 'static { 
+    pub fn register(&mut self, path: &str, method: HTTP, callback: impl FnMut(Request, Response) -> Response + 'static) { 
         let currently_registered = self.registered_routes.get_mut(path);
 
         match currently_registered {
@@ -147,28 +160,32 @@ impl App {
                             break;
                         }    
                     }
-                    
-                    println!("{message}");
 
-                    let meta = parser::parse_http_meta(&message).unwrap();
+                    let maybe_request = parser::parse_request(&message);
 
-                    let router = self.registered_routes.get_mut(&meta.path);
+                    if maybe_request.is_none() {
+                        self.send_status(&mut s, 400);
+                        continue;
+                    }
+
+                    let request = maybe_request.unwrap();
+
+                    let router = self.registered_routes.get_mut(&request.path.raw);
 
                     if router.is_none() {
                         self.send_status(&mut s, 404)?;
                         continue;
                     }
 
-                    let response_obj = router.unwrap().get_mut(&meta.method);
+                    let response_obj = router.unwrap().get_mut(&request.method);
 
                     if response_obj.is_none() {
                         self.send_status(&mut s, 405)?;
                         continue;
                     }
 
-                    // For now, only 200 is allowed
-
-                    send_response_object(&mut s, (response_obj.unwrap().callback)(0, Response { status: 200, body: String::new() }))?;
+                    let res = Response { status: 200, body: String::new() };
+                    send_response_object(&mut s, (response_obj.unwrap().callback)(request, res))?;
 
                     // s.write(b"HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Type: application/json; charset=utf-8\r\nKeep-Alive: timeout=5\r\n\r\n{\"success\":\"")?;
     
