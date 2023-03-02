@@ -19,7 +19,7 @@ fn main() {
     let mut app = ratt::App::new();
 
     app.register("/", ratt::HTTP::GET, | _req, res | {
-        res.send("Some text!".to_string())
+        res.set_header("custom-header".to_string(), "value".to_string()).send("Some text!".to_string())
     });
 
     app.register("/post-example", ratt::HTTP::POST, | _req, res | {

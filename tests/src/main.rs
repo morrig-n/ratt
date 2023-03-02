@@ -24,5 +24,9 @@ fn main() {
         res.set_status(201).send("Created!".to_string())
     });
 
+    app.register("/json" ,ratt::HTTP::GET, |_req, res| {
+        res.set_header("Content-Type".to_string(), "application/json".to_string()).send("{\"example\": 2}".to_string())
+    });
+
     app.listen(":8000").unwrap();
 }

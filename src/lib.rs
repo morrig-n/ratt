@@ -50,7 +50,8 @@ pub struct Request {
 pub struct Response {
     // TODO: Maybe move this to an Enum?
     status: usize,
-    body: String
+    body: String,
+    headers: HashMap<String, String>
 }
 
 impl Response {
@@ -61,6 +62,11 @@ impl Response {
 
     pub fn send(mut self, content: String) -> Self {
         self.body = content;
+        self
+    }
+
+    pub fn set_header(mut self, key: String, value: String) -> Self {
+        self.headers.insert(key.to_lowercase(), value);
         self
     }
 }
@@ -77,7 +83,11 @@ fn send_response_object(stream: &mut TcpStream, response: Response) -> std::io::
         _ => b"200 OK"
     })?;
 
-    stream.write(b"\r\nConnection: keep-alive\r\nContent-Type: text/plain; charset=utf-8\r\nKeep-Alive: timeout=5\r\n\r\n")?;
+    stream.write(b"\r\n")?;
+    response.headers.iter().for_each(|(key, val)| {
+        stream.write(format!("{}: {}\r\n", key, val).as_bytes()).unwrap();
+    });
+    stream.write(b"\r\n")?;
     stream.write(response.body.as_bytes())?;
 
     Ok(())
@@ -188,7 +198,12 @@ impl App {
                         continue;
                     }
 
-                    let res = Response { status: 200, body: String::new() };
+                    let mut headers = HashMap::<String, String>::new();
+                    headers.insert("content-type".to_string(), "text/plain; charset=utf-8".to_string());
+                    headers.insert("connection".to_string(), "keep-alive".to_string());
+                    headers.insert("keep-alive".to_string(), "timeout=5".to_string());
+
+                    let res = Response { status: 200, body: String::new(), headers };
                     send_response_object(&mut s, (response_obj.unwrap().callback)(request, res))?;
 
                     // s.write(b"HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Type: application/json; charset=utf-8\r\nKeep-Alive: timeout=5\r\n\r\n{\"success\":\"")?;
