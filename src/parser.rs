@@ -40,6 +40,26 @@ pub fn parse_request(message: &str) -> Option<Request> {
     };
 
     // Parse headers
+    let mut headers = HashMap::<String, String>::new(); 
+
+    while let Some(line) = lines.next() {
+        if line.trim().is_empty() {
+            break;
+        }  
+
+        // Parse header
+        // TODO: Maybe get a list of allowed headers?
+        
+        let mut header = line.trim().split(":");
+
+        let field_name = header.next();
+        if field_name.is_none() || field_name.unwrap().is_empty() { continue; }
+
+        let field_value = header.next();
+        if field_value.is_none() || field_value.unwrap().is_empty() { continue; }
+
+        headers.insert(field_name.unwrap().trim().to_string(), field_value.unwrap().trim().to_string());
+    }
 
     // Parse body (ignored for now)
     
@@ -48,7 +68,7 @@ pub fn parse_request(message: &str) -> Option<Request> {
             path: RequestPath { raw: target.to_string() },
             method,
             version,
-            headers: HashMap::<String, String>::new()
+            headers
         }
     )
 }
