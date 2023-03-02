@@ -26,6 +26,14 @@ fn main() {
         res.set_status(201).send("Created successfully!".to_string())      
     });
 
+    app.register("/query", ratt::HTTP::GET, | req, res | {
+        if let Some(param) = req.path.query.get("example") {
+            res.send("The search param 'example' was equal to {}", param)
+        } else {
+            res.send("The search param 'example' was not provided.")    
+        }
+    });
+
     app.listen(":8080").unwrap();
 }
 ```
