@@ -34,7 +34,9 @@ pub enum HTTPVersion {
 
 #[derive(Debug)]
 pub struct RequestPath {
-    raw: String
+    pub raw: String,
+    pub absolute: String,
+    pub query: HashMap<String, String>
 }
 
 #[derive(Debug)]
@@ -110,6 +112,7 @@ impl App {
 
     fn send_status(&self, stream: &mut TcpStream, status: usize) -> std::io::Result<()> {
         let meta = match status {
+            400 => "400 Bad Request",
             404 => "404 Not Found",
             405 => "405 Method Not Allowed",
             _ => "200 OK"
@@ -125,7 +128,8 @@ impl App {
         Ok(()) 
     }
 
-
+    // TODO: Listen shouldn't really return Err at any point, since that
+    // has crashed before on BrokenPipe
     pub fn listen(&mut self, port: &str) -> std::io::Result<()> {
         let listener = TcpListener::bind(format!("127.0.0.1{}", port))?;
 
@@ -164,13 +168,13 @@ impl App {
                     let maybe_request = parser::parse_request(&message);
 
                     if maybe_request.is_none() {
-                        self.send_status(&mut s, 400);
+                        self.send_status(&mut s, 400)?;
                         continue;
                     }
 
                     let request = maybe_request.unwrap();
 
-                    let router = self.registered_routes.get_mut(&request.path.raw);
+                    let router = self.registered_routes.get_mut(&request.path.absolute);
 
                     if router.is_none() {
                         self.send_status(&mut s, 404)?;

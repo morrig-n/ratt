@@ -2,6 +2,27 @@ use std::collections::HashMap;
 
 use crate::{RequestPath, HTTP, HTTPVersion, Request};
 
+fn parse_path(path: &str) -> Option<RequestPath> {
+    // We only support relative paths currently
+    // e.g. /, /abc, /abc?d=4&e=3
+    let mut query = HashMap::<String, String>::new();
+
+    match path.split_once("?") {
+        Some((absolute, search)) => {
+            search.split("&").for_each(|param| {
+                if let Some((key, value)) = param.split_once("=") {
+                    query.insert(key.to_string(), value.to_string());
+                }
+            });
+
+            Some(RequestPath { raw: path.to_string(), absolute: absolute.to_string(), query })
+        },
+        None => {
+            Some(RequestPath { raw: path.to_string(), absolute: path.to_string(), query })
+        }
+    }
+}
+
 pub fn parse_request(message: &str) -> Option<Request> {
     let mut lines = message.lines();
 
@@ -30,7 +51,7 @@ pub fn parse_request(message: &str) -> Option<Request> {
     };
 
     // TODO: Deal with dynamic routes?
-    let target = req_fields.next()?;
+    let path = parse_path(req_fields.next()?)?;
 
     let version = match req_fields.next()? {
         "HTTP/1" => HTTPVersion::One,
@@ -61,11 +82,9 @@ pub fn parse_request(message: &str) -> Option<Request> {
         headers.insert(field_name.unwrap().trim().to_string(), field_value.unwrap().trim().to_string());
     }
 
-    // Parse body (ignored for now)
-    
     Some(
         Request {
-            path: RequestPath { raw: target.to_string() },
+            path,
             method,
             version,
             headers
